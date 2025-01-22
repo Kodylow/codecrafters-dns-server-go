@@ -20,10 +20,4 @@ func main() {
 		log.Error.Fatal("Failed to resolve UDP address:", err)
 	}
 	log.Debug.Printf("Resolved UDP address: %s", udpAddr)
-
-	// Rest of your code, replacing the log calls with:
-	// log.Info.Printf(...)
-	// log.Warn.Printf(...)
-	// log.Error.Printf(...)
-	// log.Debug.Printf(...)
 }
