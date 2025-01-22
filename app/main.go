@@ -17,7 +17,42 @@ func main() {
 	// Resolve the UDP address to listen on.
 	udpAddr, err := net.ResolveUDPAddr("udp", "127.0.0.1:2053")
 	if err != nil {
-		log.Error.Fatal("Failed to resolve UDP address:", err)
+		log.Error.Printf("Failed to resolve UDP address: %v", err)
+		return
 	}
-	log.Debug.Printf("Resolved UDP address: %s", udpAddr)
+
+	// Listen for incoming UDP packets on the resolved address.
+	udpConn, err := net.ListenUDP("udp", udpAddr)
+	if err != nil {
+		log.Error.Printf("Failed to bind to address: %v", err)
+		return
+	}
+	defer udpConn.Close()
+
+	// Buffer to store incoming data.
+	buf := make([]byte, 512)
+
+	for {
+		// Read data from the UDP connection.
+		size, source, err := udpConn.ReadFromUDP(buf)
+		if err != nil {
+			log.Error.Printf("Error receiving data: %v", err)
+			break
+		}
+
+		// Convert the received bytes to a string.
+		receivedData := string(buf[:size])
+		log.Info.Printf("Received %d bytes from %s: %s", size, source, receivedData)
+
+		// Create an empty response to send back to the source.
+		response := []byte{}
+
+		// Send the empty response back to the source.
+		_, err = udpConn.WriteToUDP(response, source)
+		if err != nil {
+			log.Error.Printf("Failed to send response: %v", err)
+		}
+	}
+
+	log.Info.Println("UDP server setup complete.")
 }
