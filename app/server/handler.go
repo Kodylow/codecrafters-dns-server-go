@@ -54,8 +54,19 @@ func (h *DefaultMessageHandler) Handle(data []byte) (message.Message, error) {
 
 	// Create response header
 	responseHeader := header
-	responseHeader.QR = 1      // Set QR bit to 1 for response
-	responseHeader.ANCount = 1 // Set answer count to 1 since we're including one answer
+	responseHeader.QR = 1      // Response bit
+	responseHeader.AA = 0      // Not authoritative
+	responseHeader.TC = 0      // Not truncated
+	responseHeader.RA = 0      // Recursion not available
+	responseHeader.Z = 0       // Reserved bits must be 0
+	responseHeader.ANCount = 1 // One answer
+
+	// Set RCODE based on OPCODE
+	if header.Opcode == 0 {
+		responseHeader.RCode = 0 // No error for standard query
+	} else {
+		responseHeader.RCode = 4 // Not implemented for other opcodes
+	}
 
 	return message.Message{
 		Header:     responseHeader,
