@@ -24,7 +24,9 @@ type DefaultMessageHandler struct {
 // NewDefaultMessageHandler creates a new instance of DefaultMessageHandler.
 // It takes a logger as an argument to enable logging of message handling activities.
 func NewDefaultMessageHandler(log *gotracer.Logger) *DefaultMessageHandler {
-	return &DefaultMessageHandler{log: log}
+	return &DefaultMessageHandler{
+		log: log,
+	}
 }
 
 // Handle processes the DNS message contained in the data byte slice.
@@ -41,11 +43,12 @@ func (h *DefaultMessageHandler) Handle(data []byte) (message.Message, error) {
 		return message.Message{}, fmt.Errorf("failed to parse question: %w", err)
 	}
 
-	h.log.Info.Printf("Parsed DNS header - ID: %d, QR: %d, Opcode: %d",
-		header.ID, header.QR, header.Opcode)
+	// Create response header
+	responseHeader := header
+	responseHeader.QR = 1 // Set QR bit to 1 for response
 
 	return message.Message{
-		Header:     message.Header(header),
+		Header:     responseHeader,
 		Question:   question.ToBytes(),
 		Answer:     []byte{},
 		Authority:  []byte{},
