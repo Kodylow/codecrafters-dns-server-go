@@ -8,3 +8,8 @@ type Message struct {
 	Authority  []byte
 	Additional []byte
 }
+
+// ToBytes converts the Message to a byte slice
+func (m *Message) ToBytes() []byte {
+	return append(m.Header.ToBytes(), append(m.Question, append(m.Answer, append(m.Authority, m.Additional...)...)...)...)
+}

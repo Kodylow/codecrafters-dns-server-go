@@ -12,7 +12,7 @@ import (
 type MessageHandler interface {
 	// Handle processes the given byte slice representing a DNS message.
 	// It returns a byte slice containing the response or an error if processing fails.
-	Handle(data []byte) ([]byte, error)
+	Handle(data []byte) (message.Message, error)
 }
 
 // DefaultMessageHandler is a default implementation of the MessageHandler interface.
@@ -30,14 +30,25 @@ func NewDefaultMessageHandler(log *gotracer.Logger) *DefaultMessageHandler {
 // Handle processes the DNS message contained in the data byte slice.
 // It parses the DNS header and logs the header information.
 // Returns a byte slice containing the response or an error if parsing fails.
-func (h *DefaultMessageHandler) Handle(data []byte) ([]byte, error) {
+func (h *DefaultMessageHandler) Handle(data []byte) (message.Message, error) {
 	header, err := message.ParseHeader(data)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse header: %w", err)
+		return message.Message{}, fmt.Errorf("failed to parse header: %w", err)
+	}
+
+	question, _, err := message.ParseQuestion(data, 12) // Header is 12 bytes
+	if err != nil {
+		return message.Message{}, fmt.Errorf("failed to parse question: %w", err)
 	}
 
 	h.log.Info.Printf("Parsed DNS header - ID: %d, QR: %d, Opcode: %d",
 		header.ID, header.QR, header.Opcode)
 
-	return createResponse(message.Header(header))
+	return message.Message{
+		Header:     message.Header(header),
+		Question:   question.ToBytes(),
+		Answer:     []byte{},
+		Authority:  []byte{},
+		Additional: []byte{},
+	}, nil
 }

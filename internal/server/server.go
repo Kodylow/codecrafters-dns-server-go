@@ -58,6 +58,8 @@ func (s *UDPServer) serve() error {
 			return err
 		}
 
+		s.log.Info.Printf("Received request from %s", source.String())
+
 		// Handle each request in a goroutine
 		go s.handleRequest(buf[:size], source)
 	}
@@ -67,13 +69,17 @@ func (s *UDPServer) serve() error {
 // It uses the messageHandler to process the request and send a response.
 // Logs any errors that occur during processing.
 func (s *UDPServer) handleRequest(data []byte, source *net.UDPAddr) {
+	s.log.Info.Printf("Received request from %s", source.String())
+
 	response, err := s.messageHandler.Handle(data)
 	if err != nil {
 		s.log.Error.Printf("Failed to handle request: %v", err)
 		return
 	}
 
-	if _, err := s.conn.WriteToUDP(response, source); err != nil {
+	s.log.Info.Printf("Sending response to %s", source.String())
+
+	if _, err := s.conn.WriteToUDP(response.ToBytes(), source); err != nil {
 		s.log.Error.Printf("Failed to send response: %v", err)
 	}
 }
