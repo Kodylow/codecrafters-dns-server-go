@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	"github.com/codecrafters-io/dns-server-starter-go/internal/server"
+	"github.com/codecrafters-io/dns-server-starter-go/app/server"
 	"github.com/codecrafters-io/dns-server-starter-go/pkg/gotracer"
 )
 
