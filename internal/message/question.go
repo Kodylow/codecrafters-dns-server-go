@@ -71,13 +71,16 @@ func parseDomainName(data []byte) (string, int, error) {
 			}
 
 			// Get the suffix from the compression pointer
-			suffix, _, err := parseDomainName(data[0:]) // Pass full data buffer
+			suffix, _, err := parseDomainName(data[offset:])
 			if err != nil {
 				return "", 0, fmt.Errorf("failed to parse pointer target: %w", err)
 			}
 
-			parts := strings.Split(suffix, ".")
-			result = append(result, parts...)
+			if len(result) == 0 {
+				result = strings.Split(suffix, ".")
+			} else {
+				result = append(result, strings.Split(suffix, ".")...)
+			}
 			break
 		}
 
