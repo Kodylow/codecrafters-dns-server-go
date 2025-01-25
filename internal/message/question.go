@@ -44,27 +44,57 @@ func parseDomainName(data []byte) ([]byte, int, error) {
 
 	var totalBytes int
 	var result []byte
+	var seenPointers = make(map[int]bool) // Track seen pointers to prevent loops
 
+	currentPos := 0
 	for {
-		if totalBytes >= len(data) {
+		if currentPos >= len(data) {
 			return nil, 0, fmt.Errorf("incomplete domain name")
 		}
 
-		length := int(data[totalBytes])
+		length := int(data[currentPos])
+
+		// Check if this is a pointer (first two bits are 1)
+		if length&0xC0 == 0xC0 {
+			if currentPos+1 >= len(data) {
+				return nil, 0, fmt.Errorf("incomplete pointer")
+			}
+
+			// Calculate pointer offset (remove first two bits and combine with next byte)
+			offset := int(uint16(length&0x3F)<<8 | uint16(data[currentPos+1]))
+
+			// Check for pointer loops
+			if seenPointers[offset] {
+				return nil, 0, fmt.Errorf("pointer loop detected")
+			}
+			seenPointers[offset] = true
+
+			// If this is the first pointer encountered, save total bytes read
+			if totalBytes == 0 {
+				totalBytes = currentPos + 2 // 2 bytes for pointer
+			}
+
+			// Continue parsing from the offset position
+			currentPos = offset
+			continue
+		}
+
 		if length == 0 {
 			result = append(result, 0) // Add null terminator
-			totalBytes++
+			if totalBytes == 0 {
+				totalBytes = currentPos + 1
+			}
 			break
 		}
 
 		// Check if we have enough bytes for this label
-		if totalBytes+1+length > len(data) {
+		if currentPos+1+length > len(data) {
 			return nil, 0, fmt.Errorf("incomplete label")
 		}
 
 		// Append length byte and label content
-		result = append(result, data[totalBytes:totalBytes+1+length]...)
-		totalBytes += 1 + length
+		result = append(result, data[currentPos:currentPos+1+length]...)
+		currentPos += 1 + length
 	}
 
 	return result, totalBytes, nil

@@ -29,25 +29,48 @@ func NewDefaultMessageHandler(log *gotracer.Logger) *DefaultMessageHandler {
 	}
 }
 
-// Handle processes the DNS message contained in the data byte slice.
 func (h *DefaultMessageHandler) Handle(data []byte) (message.Message, error) {
 	header, err := message.ParseHeader(data)
 	if err != nil {
 		return message.Message{}, fmt.Errorf("failed to parse header: %w", err)
 	}
 
-	question, _, err := message.ParseQuestion(data, message.HeaderSize)
-	if err != nil {
-		return message.Message{}, fmt.Errorf("failed to parse question: %w", err)
+	var questions []message.Question
+	var answers []message.Answer
+	offset := 12 // Start after header
+
+	// Parse all questions
+	for i := uint16(0); i < header.QDCount; i++ {
+		question, bytesRead, err := message.ParseQuestion(data, offset)
+		if err != nil {
+			return message.Message{}, fmt.Errorf("failed to parse question %d: %w", i, err)
+		}
+		questions = append(questions, question)
+		offset += bytesRead
 	}
 
-	responseHeader := h.buildResponseHeader(header)
-	answer := h.buildAnswer(question)
+	// Create answers for each question
+	for _, question := range questions {
+		answer := message.Answer{
+			Name:   question.Name,
+			Type:   question.Type,
+			Class:  question.Class,
+			TTL:    60,
+			Length: 4,
+			RData:  []byte{8, 8, 8, 8},
+		}
+		answers = append(answers, answer)
+	}
+
+	// Update response header
+	responseHeader := header
+	responseHeader.QR = 1                   // Set QR bit to 1 for response
+	responseHeader.ANCount = header.QDCount // One answer per question
 
 	return message.Message{
 		Header:     responseHeader,
-		Question:   question,
-		Answer:     answer,
+		Questions:  questions,
+		Answers:    answers,
 		Authority:  []byte{},
 		Additional: []byte{},
 	}, nil
