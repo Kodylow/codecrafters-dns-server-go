@@ -70,8 +70,8 @@ func parseDomainName(data []byte) ([]byte, int, error) {
 	return result, totalBytes, nil
 }
 
-// ToBytes converts a Question to its wire format
-func (q Question) ToBytes() []byte {
+// Encode converts a Question to its wire format
+func (q Question) Encode() []byte {
 	result := make([]byte, 0, len(q.Name)+4)
 	result = append(result, q.Name...)
 

@@ -81,8 +81,8 @@ func ParseHeader(data []byte) (Header, error) {
 	return h, nil
 }
 
-// ToBytes converts a Header to its wire format representation
-func (h *Header) ToBytes() []byte {
+// Encode converts a Header to its wire format representation
+func (h *Header) Encode() []byte {
 	buf := make([]byte, 12)
 
 	// Write ID

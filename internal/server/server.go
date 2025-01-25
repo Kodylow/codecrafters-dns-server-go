@@ -79,7 +79,7 @@ func (s *UDPServer) handleRequest(data []byte, source *net.UDPAddr) {
 
 	s.log.Info.Printf("Sending response to %s", source.String())
 
-	if _, err := s.conn.WriteToUDP(response.ToBytes(), source); err != nil {
+	if _, err := s.conn.WriteToUDP(response.Encode(), source); err != nil {
 		s.log.Error.Printf("Failed to send response: %v", err)
 	}
 }

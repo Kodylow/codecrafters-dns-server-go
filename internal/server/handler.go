@@ -43,14 +43,23 @@ func (h *DefaultMessageHandler) Handle(data []byte) (message.Message, error) {
 		return message.Message{}, fmt.Errorf("failed to parse question: %w", err)
 	}
 
+	answer := message.Answer{
+		Name:   question.Name,
+		Type:   question.Type,
+		Class:  question.Class,
+		TTL:    60,
+		Length: 4,
+		RData:  []byte{8, 8, 8, 8},
+	}
+
 	// Create response header
 	responseHeader := header
 	responseHeader.QR = 1 // Set QR bit to 1 for response
 
 	return message.Message{
 		Header:     responseHeader,
-		Question:   question.ToBytes(),
-		Answer:     []byte{},
+		Question:   question,
+		Answer:     answer,
 		Authority:  []byte{},
 		Additional: []byte{},
 	}, nil
