@@ -69,17 +69,30 @@ func (s *UDPServer) serve() error {
 // It uses the messageHandler to process the request and send a response.
 // Logs any errors that occur during processing.
 func (s *UDPServer) handleRequest(data []byte, source *net.UDPAddr) {
-	s.log.Info.Printf("Received request from %s", source.String())
+	s.log.Debugf("Processing DNS request", map[string]interface{}{
+		"client":    source.String(),
+		"data_size": len(data),
+	})
 
 	response, err := s.messageHandler.Handle(data)
 	if err != nil {
-		s.log.Error.Printf("Failed to handle request: %v", err)
+		s.log.Errorf("Failed to handle request", map[string]interface{}{
+			"error":  err.Error(),
+			"client": source.String(),
+		})
 		return
 	}
 
-	s.log.Info.Printf("Sending response to %s", source.String())
+	encoded := response.Encode()
+	s.log.Debugf("Sending DNS response", map[string]interface{}{
+		"client":        source.String(),
+		"response_size": len(encoded),
+	})
 
-	if _, err := s.conn.WriteToUDP(response.Encode(), source); err != nil {
-		s.log.Error.Printf("Failed to send response: %v", err)
+	if _, err := s.conn.WriteToUDP(encoded, source); err != nil {
+		s.log.Errorf("Failed to send response", map[string]interface{}{
+			"error":  err.Error(),
+			"client": source.String(),
+		})
 	}
 }

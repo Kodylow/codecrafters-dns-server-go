@@ -16,16 +16,14 @@ type Question struct {
 func ParseQuestion(data []byte, offset int) (Question, int, error) {
 	name, bytesRead, err := parseDomainName(data[offset:])
 	if err != nil {
-		return Question{}, 0, fmt.Errorf("failed to parse domain name: %w", err)
+		return Question{}, 0, fmt.Errorf("failed to parse domain name at offset %d: %w", offset, err)
 	}
 
-	// Need at least 4 more bytes for Type and Class
 	remainingBytes := len(data) - (offset + bytesRead)
 	if remainingBytes < 4 {
-		return Question{}, 0, fmt.Errorf("insufficient bytes for question type and class")
+		return Question{}, 0, fmt.Errorf("insufficient bytes for question type and class: need 4, got %d", remainingBytes)
 	}
 
-	// Read Type and Class (2 bytes each)
 	qType := binary.BigEndian.Uint16(data[offset+bytesRead : offset+bytesRead+2])
 	qClass := binary.BigEndian.Uint16(data[offset+bytesRead+2 : offset+bytesRead+4])
 
@@ -44,55 +42,51 @@ func parseDomainName(data []byte) ([]byte, int, error) {
 
 	var totalBytes int
 	var result []byte
-	var seenPointers = make(map[int]bool) // Track seen pointers to prevent loops
+	var seenPointers = make(map[int]bool)
 
 	currentPos := 0
 	for {
 		if currentPos >= len(data) {
-			return nil, 0, fmt.Errorf("incomplete domain name")
+			return nil, 0, fmt.Errorf("incomplete domain name at position %d", currentPos)
 		}
 
 		length := int(data[currentPos])
 
-		// Check if this is a pointer (first two bits are 1)
+		// Handle pointer
 		if length&0xC0 == 0xC0 {
 			if currentPos+1 >= len(data) {
-				return nil, 0, fmt.Errorf("incomplete pointer")
+				return nil, 0, fmt.Errorf("incomplete pointer at position %d", currentPos)
 			}
 
-			// Calculate pointer offset (remove first two bits and combine with next byte)
 			offset := int(uint16(length&0x3F)<<8 | uint16(data[currentPos+1]))
 
-			// Check for pointer loops
 			if seenPointers[offset] {
-				return nil, 0, fmt.Errorf("pointer loop detected")
+				return nil, 0, fmt.Errorf("pointer loop detected at offset %d", offset)
 			}
 			seenPointers[offset] = true
 
-			// If this is the first pointer encountered, save total bytes read
 			if totalBytes == 0 {
-				totalBytes = currentPos + 2 // 2 bytes for pointer
+				totalBytes = currentPos + 2
 			}
-
-			// Continue parsing from the offset position
 			currentPos = offset
 			continue
 		}
 
+		// End of domain name
 		if length == 0 {
-			result = append(result, 0) // Add null terminator
+			result = append(result, 0)
 			if totalBytes == 0 {
 				totalBytes = currentPos + 1
 			}
 			break
 		}
 
-		// Check if we have enough bytes for this label
+		// Regular label
 		if currentPos+1+length > len(data) {
-			return nil, 0, fmt.Errorf("incomplete label")
+			return nil, 0, fmt.Errorf("incomplete label at position %d: need %d bytes, got %d",
+				currentPos, length, len(data)-(currentPos+1))
 		}
 
-		// Append length byte and label content
 		result = append(result, data[currentPos:currentPos+1+length]...)
 		currentPos += 1 + length
 	}

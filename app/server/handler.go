@@ -30,10 +30,22 @@ func NewDefaultMessageHandler(log *gotracer.Logger) *DefaultMessageHandler {
 }
 
 func (h *DefaultMessageHandler) Handle(data []byte) (message.Message, error) {
+	h.log.Debugf("Parsing DNS message", map[string]interface{}{
+		"data_length": len(data),
+		"raw_data":    fmt.Sprintf("%v", data),
+	})
+
 	header, err := message.ParseHeader(data)
 	if err != nil {
 		return message.Message{}, fmt.Errorf("failed to parse header: %w", err)
 	}
+
+	h.log.Debugf("Parsed DNS header", map[string]interface{}{
+		"id":             header.ID,
+		"qr":             header.QR,
+		"opcode":         header.Opcode,
+		"question_count": header.QDCount,
+	})
 
 	var questions []message.Question
 	var answers []message.Answer
@@ -41,10 +53,23 @@ func (h *DefaultMessageHandler) Handle(data []byte) (message.Message, error) {
 
 	// Parse all questions
 	for i := uint16(0); i < header.QDCount; i++ {
+		h.log.Debugf("Parsing question", map[string]interface{}{
+			"question_number": i + 1,
+			"offset":          offset,
+		})
+
 		question, bytesRead, err := message.ParseQuestion(data, offset)
 		if err != nil {
 			return message.Message{}, fmt.Errorf("failed to parse question %d: %w", i, err)
 		}
+
+		h.log.Debugf("Parsed question", map[string]interface{}{
+			"name":       string(question.Name),
+			"type":       question.Type,
+			"class":      question.Class,
+			"bytes_read": bytesRead,
+		})
+
 		questions = append(questions, question)
 		offset += bytesRead
 	}
@@ -67,13 +92,20 @@ func (h *DefaultMessageHandler) Handle(data []byte) (message.Message, error) {
 	responseHeader.QR = 1                   // Set QR bit to 1 for response
 	responseHeader.ANCount = header.QDCount // One answer per question
 
-	return message.Message{
+	msg := message.Message{
 		Header:     responseHeader,
 		Questions:  questions,
 		Answers:    answers,
 		Authority:  []byte{},
 		Additional: []byte{},
-	}, nil
+	}
+
+	h.log.Debugf("Created DNS response", map[string]interface{}{
+		"answers":       len(answers),
+		"response_size": len(msg.Encode()),
+	})
+
+	return msg, nil
 }
 
 // buildResponseHeader creates a response header based on the request header
