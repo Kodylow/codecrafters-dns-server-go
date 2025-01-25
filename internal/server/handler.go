@@ -54,7 +54,8 @@ func (h *DefaultMessageHandler) Handle(data []byte) (message.Message, error) {
 
 	// Create response header
 	responseHeader := header
-	responseHeader.QR = 1 // Set QR bit to 1 for response
+	responseHeader.QR = 1      // Set QR bit to 1 for response
+	responseHeader.ANCount = 1 // Set answer count to 1 since we're including one answer
 
 	return message.Message{
 		Header:     responseHeader,
