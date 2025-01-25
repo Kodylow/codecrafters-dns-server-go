@@ -1,5 +1,10 @@
 package message
 
+const (
+	HeaderSize    = 12
+	StandardQuery = 0
+)
+
 // Message represents a DNS message
 type Message struct {
 	Header     Header

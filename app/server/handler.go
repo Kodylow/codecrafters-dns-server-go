@@ -30,43 +30,19 @@ func NewDefaultMessageHandler(log *gotracer.Logger) *DefaultMessageHandler {
 }
 
 // Handle processes the DNS message contained in the data byte slice.
-// It parses the DNS header and logs the header information.
-// Returns a byte slice containing the response or an error if parsing fails.
 func (h *DefaultMessageHandler) Handle(data []byte) (message.Message, error) {
 	header, err := message.ParseHeader(data)
 	if err != nil {
 		return message.Message{}, fmt.Errorf("failed to parse header: %w", err)
 	}
 
-	question, _, err := message.ParseQuestion(data, 12) // Header is 12 bytes
+	question, _, err := message.ParseQuestion(data, message.HeaderSize)
 	if err != nil {
 		return message.Message{}, fmt.Errorf("failed to parse question: %w", err)
 	}
 
-	answer := message.Answer{
-		Name:   question.Name,
-		Type:   question.Type,
-		Class:  question.Class,
-		TTL:    60,
-		Length: 4,
-		RData:  []byte{8, 8, 8, 8},
-	}
-
-	// Create response header
-	responseHeader := header
-	responseHeader.QR = 1      // Response bit
-	responseHeader.AA = 0      // Not authoritative
-	responseHeader.TC = 0      // Not truncated
-	responseHeader.RA = 0      // Recursion not available
-	responseHeader.Z = 0       // Reserved bits must be 0
-	responseHeader.ANCount = 1 // One answer
-
-	// Set RCODE based on OPCODE
-	if header.Opcode == 0 {
-		responseHeader.RCode = 0 // No error for standard query
-	} else {
-		responseHeader.RCode = 4 // Not implemented for other opcodes
-	}
+	responseHeader := h.buildResponseHeader(header)
+	answer := h.buildAnswer(question)
 
 	return message.Message{
 		Header:     responseHeader,
@@ -75,4 +51,47 @@ func (h *DefaultMessageHandler) Handle(data []byte) (message.Message, error) {
 		Authority:  []byte{},
 		Additional: []byte{},
 	}, nil
+}
+
+// buildResponseHeader creates a response header based on the request header
+func (h *DefaultMessageHandler) buildResponseHeader(header message.Header) message.Header {
+	const (
+		ResponseBit = 1
+		NoError     = 0
+		NotImpl     = 4
+	)
+
+	response := header
+	response.QR = ResponseBit
+	response.AA = 0
+	response.TC = 0
+	response.RA = 0
+	response.Z = 0
+	response.ANCount = 1
+
+	if header.Opcode == message.StandardQuery {
+		response.RCode = NoError
+	} else {
+		response.RCode = NotImpl
+	}
+
+	return response
+}
+
+// buildAnswer creates an answer section for the DNS response
+func (h *DefaultMessageHandler) buildAnswer(question message.Question) message.Answer {
+	const (
+		DefaultTTL    = 60
+		IPv4Length    = 4
+		DefaultIPAddr = 0x08080808 // 8.8.8.8
+	)
+
+	return message.Answer{
+		Name:   question.Name,
+		Type:   question.Type,
+		Class:  question.Class,
+		TTL:    DefaultTTL,
+		Length: IPv4Length,
+		RData:  []byte{8, 8, 8, 8},
+	}
 }
