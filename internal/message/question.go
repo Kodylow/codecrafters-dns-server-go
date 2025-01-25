@@ -3,11 +3,12 @@ package message
 import (
 	"encoding/binary"
 	"fmt"
+	"strings"
 )
 
 // Question represents a DNS question section
 type Question struct {
-	Name  []byte
+	Name  string
 	Type  uint16
 	Class uint16
 }
@@ -35,19 +36,19 @@ func ParseQuestion(data []byte, offset int) (Question, int, error) {
 }
 
 // parseDomainName parses a DNS domain name from the given byte slice
-func parseDomainName(data []byte) ([]byte, int, error) {
+func parseDomainName(data []byte) (string, int, error) {
 	if len(data) == 0 {
-		return nil, 0, fmt.Errorf("empty data for domain name")
+		return "", 0, fmt.Errorf("empty data for domain name")
 	}
 
+	var result []string
 	var totalBytes int
-	var result []byte
 	var seenPointers = make(map[int]bool)
 
 	currentPos := 0
 	for {
 		if currentPos >= len(data) {
-			return nil, 0, fmt.Errorf("incomplete domain name at position %d", currentPos)
+			return "", 0, fmt.Errorf("incomplete domain name at position %d", currentPos)
 		}
 
 		length := int(data[currentPos])
@@ -55,26 +56,32 @@ func parseDomainName(data []byte) ([]byte, int, error) {
 		// Handle pointer
 		if length&0xC0 == 0xC0 {
 			if currentPos+1 >= len(data) {
-				return nil, 0, fmt.Errorf("incomplete pointer at position %d", currentPos)
+				return "", 0, fmt.Errorf("incomplete pointer at position %d", currentPos)
 			}
 
 			offset := int(uint16(length&0x3F)<<8 | uint16(data[currentPos+1]))
 
 			if seenPointers[offset] {
-				return nil, 0, fmt.Errorf("pointer loop detected at offset %d", offset)
+				return "", 0, fmt.Errorf("pointer loop detected at offset %d", offset)
 			}
 			seenPointers[offset] = true
 
 			if totalBytes == 0 {
 				totalBytes = currentPos + 2
 			}
-			currentPos = offset
-			continue
+
+			// Recursively parse the pointed-to name
+			suffix, _, err := parseDomainName(data[offset:])
+			if err != nil {
+				return "", 0, fmt.Errorf("failed to parse pointer target: %w", err)
+			}
+
+			result = append(result, suffix)
+			break
 		}
 
 		// End of domain name
 		if length == 0 {
-			result = append(result, 0)
 			if totalBytes == 0 {
 				totalBytes = currentPos + 1
 			}
@@ -83,26 +90,36 @@ func parseDomainName(data []byte) ([]byte, int, error) {
 
 		// Regular label
 		if currentPos+1+length > len(data) {
-			return nil, 0, fmt.Errorf("incomplete label at position %d: need %d bytes, got %d",
+			return "", 0, fmt.Errorf("incomplete label at position %d: need %d bytes, got %d",
 				currentPos, length, len(data)-(currentPos+1))
 		}
 
-		result = append(result, data[currentPos:currentPos+1+length]...)
+		label := string(data[currentPos+1 : currentPos+1+length])
+		result = append(result, label)
 		currentPos += 1 + length
 	}
 
-	return result, totalBytes, nil
+	return strings.Join(result, "."), totalBytes, nil
 }
 
 // Encode converts a Question to its wire format
 func (q Question) Encode() []byte {
-	result := make([]byte, 0, len(q.Name)+4)
-	result = append(result, q.Name...)
+	result := make([]byte, 0)
 
+	// Encode domain name
+	parts := strings.Split(q.Name, ".")
+	for _, part := range parts {
+		result = append(result, byte(len(part)))
+		result = append(result, []byte(part)...)
+	}
+	result = append(result, 0)
+
+	// Type
 	typeBytes := make([]byte, 2)
 	binary.BigEndian.PutUint16(typeBytes, q.Type)
 	result = append(result, typeBytes...)
 
+	// Class
 	classBytes := make([]byte, 2)
 	binary.BigEndian.PutUint16(classBytes, q.Class)
 	result = append(result, classBytes...)

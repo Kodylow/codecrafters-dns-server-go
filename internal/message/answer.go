@@ -8,7 +8,7 @@ import (
 // Answer represents a DNS answer
 type Answer struct {
 	// Name is the domain name of the answer, encoded as a sequence of labels
-	Name []byte
+	Name string
 	// Type, 2 bytes, 0x0001 for A record, 0x0005 for CNAME, etc.
 	Type uint16
 	// Class, 2 bytes, usually set to 0x0001 for IN, 0x0002 for CH, etc.
@@ -23,7 +23,7 @@ type Answer struct {
 
 func NewAnswer(domain string) *Answer {
 	return &Answer{
-		Name:   encodeDomainName(domain),
+		Name:   domain,
 		Type:   1, // A record
 		Class:  1, // IN class
 		TTL:    60,
@@ -32,11 +32,16 @@ func NewAnswer(domain string) *Answer {
 	}
 }
 
-func (a *Answer) Encode() []byte {
+func (a Answer) Encode() []byte {
 	result := make([]byte, 0)
 
-	// Name
-	result = append(result, a.Name...)
+	// Encode domain name
+	parts := strings.Split(a.Name, ".")
+	for _, part := range parts {
+		result = append(result, byte(len(part)))
+		result = append(result, []byte(part)...)
+	}
+	result = append(result, 0) // null terminator
 
 	// Type (2 bytes)
 	typeBytes := make([]byte, 2)
