@@ -2,6 +2,7 @@ package server
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/codecrafters-io/dns-server-starter-go/internal/message"
 	"github.com/codecrafters-io/dns-server-starter-go/pkg/gotracer"
@@ -53,21 +54,40 @@ func (h *DefaultMessageHandler) Handle(data []byte) (message.Message, error) {
 
 	// Parse all questions
 	for i := uint16(0); i < header.QDCount; i++ {
-		h.log.Debugf("Parsing question", map[string]interface{}{
+		h.log.Debugf("Starting question parse", map[string]interface{}{
 			"question_number": i + 1,
 			"offset":          offset,
+			"data_slice":      fmt.Sprintf("%v", data[offset:]),
+			"first_byte":      fmt.Sprintf("0x%02x", data[offset]),
 		})
+
+		// Check for compression pointer
+		if offset < len(data) && (data[offset]&0xC0) == 0xC0 {
+			h.log.Debugf("Detected compression pointer", map[string]interface{}{
+				"pointer_bytes": fmt.Sprintf("0x%02x%02x", data[offset], data[offset+1]),
+				"offset":        offset,
+				"target":        uint16(data[offset]&0x3F)<<8 | uint16(data[offset+1]),
+			})
+		}
 
 		question, bytesRead, err := message.ParseQuestion(data, offset)
 		if err != nil {
+			h.log.Errorf("Question parse failed", map[string]interface{}{
+				"error":        err.Error(),
+				"offset":       offset,
+				"data_length":  len(data),
+				"partial_data": fmt.Sprintf("%v", data[offset:min(offset+10, len(data))]),
+			})
 			return message.Message{}, fmt.Errorf("failed to parse question %d: %w", i, err)
 		}
 
-		h.log.Debugf("Parsed question", map[string]interface{}{
-			"name":       string(question.Name),
-			"type":       question.Type,
-			"class":      question.Class,
-			"bytes_read": bytesRead,
+		h.log.Debugf("Parsed question successfully", map[string]interface{}{
+			"name":          question.Name,
+			"type":          question.Type,
+			"class":         question.Class,
+			"bytes_read":    bytesRead,
+			"next_offset":   offset + bytesRead,
+			"domain_labels": strings.Split(question.Name, "."),
 		})
 
 		questions = append(questions, question)
@@ -149,4 +169,11 @@ func (h *DefaultMessageHandler) buildAnswer(question message.Question) message.A
 		Length: IPv4Length,
 		RData:  []byte{8, 8, 8, 8},
 	}
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
