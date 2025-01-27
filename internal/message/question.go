@@ -15,7 +15,7 @@ type Question struct {
 
 // ParseQuestion parses a DNS question from a byte slice starting at the given offset
 func ParseQuestion(data []byte, offset int) (Question, int, error) {
-	name, bytesRead, err := parseDomainName(data[offset:])
+	name, bytesRead, err := parseDomainName(data, offset)
 	if err != nil {
 		return Question{}, 0, fmt.Errorf("failed to parse domain name at offset %d: %w", offset, err)
 	}
@@ -36,9 +36,9 @@ func ParseQuestion(data []byte, offset int) (Question, int, error) {
 }
 
 // parseDomainName parses a DNS domain name from the given byte slice
-func parseDomainName(data []byte) (string, int, error) {
-	if len(data) == 0 {
-		return "", 0, fmt.Errorf("empty data for domain name")
+func parseDomainName(data []byte, startOffset int) (string, int, error) {
+	if startOffset >= len(data) {
+		return "", 0, fmt.Errorf("start offset %d exceeds data length %d", startOffset, len(data))
 	}
 
 	var result []string
@@ -47,38 +47,38 @@ func parseDomainName(data []byte) (string, int, error) {
 
 	currentPos := 0
 	for {
-		if currentPos >= len(data) {
-			return "", 0, fmt.Errorf("incomplete domain name at position %d", currentPos)
+		absolutePos := startOffset + currentPos
+		if absolutePos >= len(data) {
+			return "", 0, fmt.Errorf("incomplete domain name at position %d", absolutePos)
 		}
 
-		length := int(data[currentPos])
+		length := int(data[absolutePos])
 
 		// Handle pointer
 		if length&0xC0 == 0xC0 {
-			if currentPos+1 >= len(data) {
-				return "", 0, fmt.Errorf("incomplete pointer at position %d", currentPos)
+			if absolutePos+1 >= len(data) {
+				return "", 0, fmt.Errorf("incomplete pointer at position %d", absolutePos)
 			}
 
-			offset := int(uint16(length&0x3F)<<8 | uint16(data[currentPos+1]))
+			pointerOffset := int(uint16(length&0x3F)<<8 | uint16(data[absolutePos+1]))
 
-			// Validate offset is within bounds
-			if offset >= len(data) {
-				return "", 0, fmt.Errorf("compression pointer offset %d exceeds data length %d", offset, len(data))
+			if pointerOffset >= len(data) {
+				return "", 0, fmt.Errorf("compression pointer offset %d exceeds data length %d", pointerOffset, len(data))
 			}
 
-			if seenPointers[offset] {
-				return "", 0, fmt.Errorf("pointer loop detected at offset %d", offset)
+			if seenPointers[pointerOffset] {
+				return "", 0, fmt.Errorf("pointer loop detected at offset %d", pointerOffset)
 			}
-			seenPointers[offset] = true
+			seenPointers[pointerOffset] = true
 
 			if totalBytes == 0 {
 				totalBytes = currentPos + 2 // 2 bytes for compression pointer
 			}
 
 			// Get the suffix from the compression pointer
-			suffix, _, err := parseDomainName(data[offset:])
+			suffix, _, err := parseDomainName(data, pointerOffset)
 			if err != nil {
-				return "", 0, fmt.Errorf("failed to parse pointer target at offset %d: %w", offset, err)
+				return "", 0, fmt.Errorf("failed to parse pointer target at offset %d: %w", pointerOffset, err)
 			}
 
 			result = append(result, strings.Split(suffix, ".")...)
@@ -95,12 +95,12 @@ func parseDomainName(data []byte) (string, int, error) {
 
 		// Regular label
 		end := currentPos + 1 + length
-		if end > len(data) {
+		if startOffset+end > len(data) {
 			return "", 0, fmt.Errorf("label at position %d exceeds data bounds: need %d bytes, got %d",
-				currentPos, length, len(data)-currentPos-1)
+				absolutePos, length, len(data)-absolutePos-1)
 		}
 
-		label := string(data[currentPos+1 : end])
+		label := string(data[startOffset+currentPos+1 : startOffset+end])
 		result = append(result, label)
 		currentPos = end
 	}
