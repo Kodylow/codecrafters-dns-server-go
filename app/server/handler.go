@@ -48,6 +48,22 @@ func (h *DefaultMessageHandler) Handle(data []byte) (message.Message, error) {
 		"question_count": header.QDCount,
 	})
 
+	// If opcode is not a standard query (0), return NotImplemented (4)
+	if header.Opcode != message.StandardQuery {
+		responseHeader := header
+		responseHeader.QR = 1    // Response
+		responseHeader.RCode = 4 // Not Implemented
+		responseHeader.ANCount = 0
+
+		return message.Message{
+			Header:     responseHeader,
+			Questions:  []message.Question{},
+			Answers:    []message.Answer{},
+			Authority:  []byte{},
+			Additional: []byte{},
+		}, nil
+	}
+
 	var questions []message.Question
 	var answers []message.Answer
 	offset := 12 // Start after header
